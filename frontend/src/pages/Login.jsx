@@ -1,0 +1,50 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
+
+export default function Login() {
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    try {
+      const { data } = await api.post('/auth/login', form);
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+      navigate('/');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Login failed');
+    }
+  }
+
+  return (
+    <div className="max-w-sm mx-auto p-6">
+      <h1 className="text-2xl font-bold mb-4 text-slate-800">Log in</h1>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <input
+          className="w-full border rounded-md p-2"
+          type="email"
+          placeholder="Email"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+          required
+        />
+        <input
+          className="w-full border rounded-md p-2"
+          type="password"
+          placeholder="Password"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          required
+        />
+        {error && <p className="text-red-500 text-sm">{error}</p>}
+        <button className="w-full bg-slate-800 text-white rounded-md p-2 font-medium">
+          Log in
+        </button>
+      </form>
+    </div>
+  );
+}
