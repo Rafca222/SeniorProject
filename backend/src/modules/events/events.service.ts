@@ -3,11 +3,21 @@ import { AppDataSource } from '../../data-source';
 import { Event } from './entities/event.entity';
 import { Attendance } from './entities/attendance.entity';
 import { SavedEvent } from './entities/saved-event.entity';
+import { Message } from './entities/message.entity';
 import type { CreateEventDto } from './dto/create-event.dto';
 
 const eventRepository = () => AppDataSource.getRepository(Event);
 const attendanceRepository = () => AppDataSource.getRepository(Attendance);
 const savedEventRepository = () => AppDataSource.getRepository(SavedEvent);
+const messageRepository = () => AppDataSource.getRepository(Message);
+
+export async function listMessages(eventId: string) {
+  return messageRepository().find({
+    where: { eventId },
+    order: { createdAt: 'ASC' },
+    take: 100, // most recent 100 in the room; older history is a future-work item
+  });
+}
 
 export async function listEvents(filters: { category?: string; city?: string; date?: string }) {
   // QueryBuilder rather than a plain .find() here because of the date::date
@@ -98,6 +108,43 @@ export async function getRoster(eventId: string) {
     .andWhere('a.status = :status', { status: 'going' })
     .andWhere('u.roster_visible = true')
     .getRawMany();
+}
+
+export class ForbiddenError extends Error {}
+export class NotFoundError extends Error {}
+
+async function assertOwnerOrAdmin(eventId: string, userId: string, userRole: string) {
+  const event = await eventRepository().findOne({ where: { id: eventId } });
+  if (!event) throw new NotFoundError('Event not found');
+  if (event.createdBy !== userId && userRole !== 'admin') {
+    throw new ForbiddenError('Only the event owner or an admin can do this');
+  }
+  return event;
+}
+
+export async function updateEvent(
+  id: string,
+  data: Partial<CreateEventDto>,
+  userId: string,
+  userRole: string
+) {
+  await assertOwnerOrAdmin(id, userId, userRole);
+
+  const patch: Record<string, unknown> = { ...data };
+  if (data.venue_name !== undefined) { patch.venueName = data.venue_name; delete patch.venue_name; }
+  if (data.venue_description !== undefined) { patch.venueDescription = data.venue_description; delete patch.venue_description; }
+  if (data.start_datetime !== undefined) { patch.startDatetime = new Date(data.start_datetime); delete patch.start_datetime; }
+  if (data.minimum_age !== undefined) { patch.minimumAge = data.minimum_age; delete patch.minimum_age; }
+  if (data.cover_image_url !== undefined) { patch.coverImageUrl = data.cover_image_url; delete patch.cover_image_url; }
+  if (data.join_policy !== undefined) { patch.joinPolicy = data.join_policy; delete patch.join_policy; }
+
+  await eventRepository().update(id, patch);
+  return eventRepository().findOne({ where: { id } });
+}
+
+export async function deleteEvent(id: string, userId: string, userRole: string) {
+  await assertOwnerOrAdmin(id, userId, userRole);
+  await eventRepository().delete(id);
 }
 
 export async function saveEvent(userId: string, eventId: string) {

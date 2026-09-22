@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import {
+  getEvent, getMyAttendance, getMySaved, getRoster,
+  joinEvent, leaveEvent, saveEvent, unsaveEvent,
+} from '../services/events-service';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString(undefined, {
@@ -14,36 +17,41 @@ export default function EventDetail() {
   const [event, setEvent] = useState(null);
   const [going, setGoing] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [roster, setRoster] = useState([]);
   const [status, setStatus] = useState('loading'); // loading | ok | error
   const [actionError, setActionError] = useState('');
 
   const isLoggedIn = !!localStorage.getItem('accessToken');
 
+  function refreshRoster() {
+    getRoster(id).then(setRoster).catch(() => {});
+  }
+
   useEffect(() => {
     setStatus('loading');
-    api.get(`/events/${id}`)
-      .then((res) => {
-        setEvent(res.data);
+    getEvent(id)
+      .then((data) => {
+        setEvent(data);
         setStatus('ok');
       })
       .catch(() => setStatus('error'));
 
+    refreshRoster();
+
     if (isLoggedIn) {
-      api.get(`/events/${id}/attendance/me`).then((res) => setGoing(res.data.status === 'going')).catch(() => {});
-      api.get(`/events/${id}/save/me`).then((res) => setSaved(res.data.saved)).catch(() => {});
+      getMyAttendance(id).then((data) => setGoing(data.status === 'going')).catch(() => {});
+      getMySaved(id).then((data) => setSaved(data.saved)).catch(() => {});
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isLoggedIn]);
 
   async function toggleGoing() {
     if (!isLoggedIn) return setActionError('Log in to RSVP to this event.');
     setActionError('');
     try {
-      if (going) {
-        await api.delete(`/events/${id}/attendance`);
-      } else {
-        await api.post(`/events/${id}/attendance`);
-      }
+      if (going) await leaveEvent(id); else await joinEvent(id);
       setGoing(!going);
+      refreshRoster(); // roster membership just changed, so refetch it
     } catch {
       setActionError('Something went wrong — try again.');
     }
@@ -53,11 +61,7 @@ export default function EventDetail() {
     if (!isLoggedIn) return setActionError('Log in to save this event.');
     setActionError('');
     try {
-      if (saved) {
-        await api.delete(`/events/${id}/save`);
-      } else {
-        await api.post(`/events/${id}/save`);
-      }
+      if (saved) await unsaveEvent(id); else await saveEvent(id);
       setSaved(!saved);
     } catch {
       setActionError('Something went wrong — try again.');
@@ -100,11 +104,42 @@ export default function EventDetail() {
         >
           {saved ? '★ Saved' : '☆ Save for later'}
         </button>
+        {going && (
+          <Link
+            to={`/events/${id}/chat`}
+            className="px-4 py-2 rounded-md font-medium text-sm border border-slate-300 text-slate-700"
+          >
+            💬 Open chat
+          </Link>
+        )}
       </div>
 
       {actionError && <p className="text-sm text-red-500 mt-2">{actionError}</p>}
 
-      {/* Roster and chat land here once those screens are built */}
+      <div className="mt-8">
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">
+          Who's going {roster.length > 0 && `(${roster.length})`}
+        </h2>
+        {roster.length === 0 ? (
+          <p className="text-sm text-slate-400">
+            No one visible on the roster yet — be the first to hit "I'm Going."
+          </p>
+        ) : (
+          <ul className="flex flex-wrap gap-2">
+            {roster.map((person) => (
+              <li
+                key={person.id}
+                className="px-3 py-1.5 rounded-full bg-slate-100 text-sm text-slate-700"
+              >
+                {person.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="text-xs text-slate-400 mt-2">
+          Only shows attendees who have kept their roster visibility on.
+        </p>
+      </div>
     </div>
   );
 }

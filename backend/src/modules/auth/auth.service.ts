@@ -1,13 +1,26 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { AppDataSource } from '../../data-source';
-import { User } from './entities/user.entity';
+import { User } from '../users/entities/user.entity';
 
 const userRepository = () => AppDataSource.getRepository(User);
 
-export function signTokens(userId: string) {
-  const accessToken = jwt.sign({ sub: userId }, process.env.JWT_ACCESS_SECRET as string, { expiresIn: '15m' });
-  const refreshToken = jwt.sign({ sub: userId }, process.env.JWT_REFRESH_SECRET as string, { expiresIn: '30d' });
+export class InvalidRefreshTokenError extends Error {}
+
+// role goes in the ACCESS token so requireAuth can authorize requests
+// without an extra database lookup on every single request.
+// tokenVersion goes in the REFRESH token -- it's what makes rotation work.
+export function signTokens(userId: string, role: string, tokenVersion: number) {
+  const accessToken = jwt.sign(
+    { sub: userId, role },
+    process.env.JWT_ACCESS_SECRET as string,
+    { expiresIn: '15m' }
+  );
+  const refreshToken = jwt.sign(
+    { sub: userId, tokenVersion },
+    process.env.JWT_REFRESH_SECRET as string,
+    { expiresIn: '30d' }
+  );
   return { accessToken, refreshToken };
 }
 
@@ -20,19 +33,14 @@ export async function createUser(data: { name: string; email: string; password: 
   const user = userRepository().create({ name: data.name, email: data.email, passwordHash });
   await userRepository().save(user);
 
-  // passwordHash is `select:false` on the entity, but .save() still returns
-  // the exact in-memory object we built, hash included -- so we strip it
-  // by hand before this ever reaches an API response.
   const { passwordHash: _omit, ...safeUser } = user;
   return safeUser;
 }
 
 export async function verifyLogin(email: string, password: string) {
-  // Explicitly asking for passwordHash here overrides its select:false
-  // default -- this is the one place in the app that's allowed to see it.
   const user = await userRepository().findOne({
     where: { email },
-    select: ['id', 'name', 'email', 'passwordHash', 'role'],
+    select: ['id', 'name', 'email', 'passwordHash', 'role', 'tokenVersion'],
   });
   if (!user) return null;
 
@@ -43,6 +51,27 @@ export async function verifyLogin(email: string, password: string) {
   return safeUser;
 }
 
-export function verifyRefreshToken(refreshToken: string) {
-  return jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET as string) as { sub: string }; // throws if invalid/expired
+// Verifies the refresh token AND rotates it: the old token's version is
+// immediately superseded, so if that same (old) refresh token is ever
+// presented again -- e.g. because it was stolen -- it will no longer match
+// and gets rejected below, instead of silently working forever.
+export async function rotateRefreshToken(oldRefreshToken: string) {
+  let payload: { sub: string; tokenVersion: number };
+  try {
+    payload = jwt.verify(oldRefreshToken, process.env.JWT_REFRESH_SECRET as string) as typeof payload;
+  } catch {
+    throw new InvalidRefreshTokenError('Refresh token is invalid or expired');
+  }
+
+  const user = await userRepository().findOne({ where: { id: payload.sub } });
+  if (!user || user.tokenVersion !== payload.tokenVersion) {
+    // Either the user no longer exists, or this exact refresh token was
+    // already used once before -- reject it either way.
+    throw new InvalidRefreshTokenError('Refresh token has already been used or is no longer valid');
+  }
+
+  const newVersion = user.tokenVersion + 1;
+  await userRepository().update(user.id, { tokenVersion: newVersion });
+
+  return signTokens(user.id, user.role, newVersion);
 }

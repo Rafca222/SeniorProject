@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../lib/api';
+import { login } from '../services/auth-service';
 
 export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
@@ -11,7 +11,7 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const { data } = await api.post('/auth/login', form);
+      const data = await login(form);
       localStorage.setItem('accessToken', data.accessToken);
       localStorage.setItem('refreshToken', data.refreshToken);
       navigate('/');

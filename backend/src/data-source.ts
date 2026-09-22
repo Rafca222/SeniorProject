@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import 'dotenv/config';
 import { DataSource } from 'typeorm';
-import { User } from './modules/auth/entities/user.entity';
+import { User } from './modules/users/entities/user.entity';
 import { Event } from './modules/events/entities/event.entity';
 import { Attendance } from './modules/events/entities/attendance.entity';
 import { SavedEvent } from './modules/events/entities/saved-event.entity';

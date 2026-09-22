@@ -16,7 +16,7 @@ router.post('/register', validateDto(RegisterDto), async (req, res) => {
     }
 
     const user = await authService.createUser({ name, email, password });
-    const tokens = authService.signTokens(user.id);
+    const tokens = authService.signTokens(user.id, user.role, user.tokenVersion);
     res.status(201).json({ user, ...tokens });
   } catch (err) {
     console.error(err);
@@ -33,7 +33,7 @@ router.post('/login', validateDto(LoginDto), async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const tokens = authService.signTokens(user.id);
+    const tokens = authService.signTokens(user.id, user.role, user.tokenVersion);
     res.json({ user, ...tokens });
   } catch (err) {
     console.error(err);
@@ -41,17 +41,20 @@ router.post('/login', validateDto(LoginDto), async (req, res) => {
   }
 });
 
-router.post('/refresh', (req, res) => {
+router.post('/refresh', async (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
     return res.status(400).json({ error: 'Missing refresh token' });
   }
   try {
-    const payload = authService.verifyRefreshToken(refreshToken);
-    const tokens = authService.signTokens(payload.sub);
+    const tokens = await authService.rotateRefreshToken(refreshToken);
     res.json(tokens);
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired refresh token' });
+  } catch (err) {
+    if (err instanceof authService.InvalidRefreshTokenError) {
+      return res.status(401).json({ error: err.message });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Failed to refresh token' });
   }
 });
 

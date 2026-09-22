@@ -36,6 +36,14 @@ export class User {
   @Column({ name: 'phone_verified', default: false })
   phoneVerified!: boolean;
 
+  // Bumped every time a refresh token is used. A refresh JWT embeds the
+  // version it was issued at; if that doesn't match the current value
+  // here, the token has already been "spent" (rotated away) and is
+  // rejected. This is what makes refresh tokens single-use rather than
+  // reusable until their 30-day expiry.
+  @Column({ name: 'token_version', type: 'int', default: 0 })
+  tokenVersion!: number;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt!: Date;
 }

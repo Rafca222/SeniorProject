@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import rateLimit from 'express-rate-limit';
@@ -10,6 +11,7 @@ import { AppDataSource } from './data-source';
 import { Message } from './modules/events/entities/message.entity';
 import authRoutes from './modules/auth/auth.controller';
 import eventsRoutes from './modules/events/events.controller';
+import usersRoutes from './modules/users/users.controller';
 
 const app = express();
 const httpServer = createServer(app);
@@ -40,18 +42,39 @@ app.get('/health/db', async (_req, res) => {
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30 });
 app.use('/auth', authLimiter, authRoutes);
 app.use('/events', eventsRoutes);
+app.use('/users', usersRoutes);
 
 const io = new Server(httpServer, { cors: { origin: corsOrigins } });
+
+// Authenticate every socket connection with the same JWT used for HTTP
+// requests. Without this, any connected client could claim to be anyone
+// by just sending a different userId in the message payload -- there was
+// nothing stopping that before. The verified userId is stored on
+// socket.data, where the app trusts it instead of anything the client
+// sends directly.
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Missing auth token'));
+  try {
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET as string) as { sub: string };
+    socket.data.userId = payload.sub;
+    next();
+  } catch {
+    next(new Error('Invalid or expired token'));
+  }
+});
 
 io.on('connection', (socket) => {
   socket.on('join_event_room', (eventId: string) => {
     socket.join(`event:${eventId}`);
   });
 
-  socket.on('new_message', async ({ eventId, userId, body }: { eventId: string; userId: string; body: string }) => {
+  socket.on('new_message', async ({ eventId, body }: { eventId: string; body: string }) => {
     try {
       const messageRepo = AppDataSource.getRepository(Message);
-      const message = await messageRepo.save(messageRepo.create({ eventId, userId, body }));
+      const message = await messageRepo.save(
+        messageRepo.create({ eventId, userId: socket.data.userId, body })
+      );
       io.to(`event:${eventId}`).emit('new_message', message);
     } catch (err) {
       console.error('Failed to persist message', err);
