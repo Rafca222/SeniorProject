@@ -6,7 +6,10 @@ import { api } from '../lib/api';
 export function listEvents(filters = {}) {
   const params = {};
   if (filters.category) params.category = filters.category;
+  if (filters.city) params.city = filters.city;
   if (filters.date) params.date = filters.date;
+  if (filters.date_from) params.date_from = filters.date_from;
+  if (filters.date_to) params.date_to = filters.date_to;
   return api.get('/events', { params }).then((res) => res.data);
 }
 
@@ -18,12 +21,20 @@ export function getMessages(id) {
   return api.get(`/events/${id}/messages`).then((res) => res.data);
 }
 
+export function createEvent(data) {
+  return api.post('/events', data).then((res) => res.data);
+}
+
 export function listTrending() {
   return api.get('/events/trending').then((res) => res.data);
 }
 
 export function listFeatured() {
   return api.get('/events/featured').then((res) => res.data);
+}
+
+export function getRecommendations() {
+  return api.get('/events/recommendations').then((res) => res.data);
 }
 
 export function getEvent(id) {

@@ -2,14 +2,16 @@ import { Router } from 'express';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { validateDto } from '../../middleware/validate-dto.middleware';
-import { requireAuth } from '../../middleware/auth.middleware';
+import { requireAuth, requireRole } from '../../middleware/auth.middleware';
 import * as eventsService from './events.service';
 
 const router = Router();
 
 router.get('/', async (req, res) => {
   try {
-    const rows = await eventsService.listEvents(req.query as { category?: string; city?: string; date?: string });
+    const rows = await eventsService.listEvents(
+      req.query as { category?: string; city?: string; date?: string; date_from?: string; date_to?: string }
+    );
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -32,6 +34,15 @@ router.get('/featured', async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch featured events' });
+  }
+});
+
+router.get('/recommendations', requireAuth, async (req, res) => {
+  try {
+    res.json(await eventsService.getRecommendations(req.userId as string));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch recommendations' });
   }
 });
 
@@ -66,7 +77,7 @@ router.get('/:id/save/me', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/', requireAuth, validateDto(CreateEventDto), async (req, res) => {
+router.post('/', requireAuth, requireRole('organizer', 'admin'), validateDto(CreateEventDto), async (req, res) => {
   try {
     const event = await eventsService.createEvent(req.body as CreateEventDto, req.userId as string);
     res.status(201).json(event);
@@ -127,7 +138,7 @@ router.delete('/:id/attendance', requireAuth, async (req, res) => {
 
 router.get('/:id/messages', requireAuth, async (req, res) => {
   try {
-    res.json(await eventsService.listMessages(req.params.id));
+    res.json(await eventsService.listMessages(req.params.id, req.userId as string));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch messages' });

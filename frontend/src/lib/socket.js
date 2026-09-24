@@ -1,29 +1,14 @@
 import { io } from 'socket.io-client';
 
-// One shared socket for the whole app, created lazily on first use rather
-// than at import time -- so it doesn't try to connect before the user has
-// actually opened a chat screen. The access token is sent in the auth
-// handshake so the backend can verify who's connecting (see server.ts's
-// io.use() middleware) instead of trusting whatever userId a message
-// claims to be from.
-let socket = null;
-
-export function getSocket() {
-  if (!socket) {
-    socket = io(import.meta.env.VITE_API_URL, {
-      autoConnect: true,
-      auth: { token: localStorage.getItem('accessToken') },
-    });
-  }
-  return socket;
-}
-
-// Call this after a fresh login, or if the access token was just refreshed,
-// so a currently-open socket reconnects with the new token instead of
-// carrying on with a stale one.
-export function reconnectSocket() {
-  if (socket) {
-    socket.auth = { token: localStorage.getItem('accessToken') };
-    socket.disconnect().connect();
-  }
+// Deliberately NOT a singleton. A previous version cached one shared
+// socket for the whole app's lifetime -- but the server only checks who
+// you are once, at the initial handshake. If someone logged into a
+// different account in the same tab afterward, that cached connection
+// kept using the OLD identity forever, silently mislabeling every
+// message. Creating a fresh connection each time a chat screen opens
+// means it always authenticates with whoever is CURRENTLY logged in.
+export function createSocket() {
+  return io(import.meta.env.VITE_API_URL, {
+    auth: { token: localStorage.getItem('accessToken') },
+  });
 }

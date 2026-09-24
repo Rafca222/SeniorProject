@@ -6,6 +6,8 @@ import { Event } from './modules/events/entities/event.entity';
 import { Attendance } from './modules/events/entities/attendance.entity';
 import { SavedEvent } from './modules/events/entities/saved-event.entity';
 import { Message } from './modules/events/entities/message.entity';
+import { Report } from './modules/safety/entities/report.entity';
+import { Block } from './modules/safety/entities/block.entity';
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -20,6 +22,6 @@ export const AppDataSource = new DataSource({
   synchronize: false,
 
   logging: false,
-  entities: [User, Event, Attendance, SavedEvent, Message],
+  entities: [User, Event, Attendance, SavedEvent, Message, Report, Block],
   migrations: ['src/migrations/*.ts'],
 });

@@ -7,3 +7,7 @@ export function getMyProfile() {
 export function updateMyProfile(data) {
   return api.put('/users/me', data).then((res) => res.data);
 }
+
+export function becomeOrganizer() {
+  return api.post('/users/me/become-organizer').then((res) => res.data);
+}

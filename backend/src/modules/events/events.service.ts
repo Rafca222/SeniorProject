@@ -1,9 +1,10 @@
-import { MoreThanOrEqual } from 'typeorm';
+import { MoreThanOrEqual, Not, In } from 'typeorm';
 import { AppDataSource } from '../../data-source';
 import { Event } from './entities/event.entity';
 import { Attendance } from './entities/attendance.entity';
 import { SavedEvent } from './entities/saved-event.entity';
 import { Message } from './entities/message.entity';
+import { getBlockedUserIds } from '../safety/safety.service';
 import type { CreateEventDto } from './dto/create-event.dto';
 
 const eventRepository = () => AppDataSource.getRepository(Event);
@@ -11,15 +12,59 @@ const attendanceRepository = () => AppDataSource.getRepository(Attendance);
 const savedEventRepository = () => AppDataSource.getRepository(SavedEvent);
 const messageRepository = () => AppDataSource.getRepository(Message);
 
-export async function listMessages(eventId: string) {
-  return messageRepository().find({
-    where: { eventId },
-    order: { createdAt: 'ASC' },
-    take: 100, // most recent 100 in the room; older history is a future-work item
-  });
+// TypeORM entities use camelCase properties (startDatetime, venueName, ...)
+// but the rest of the API -- the create/update DTOs, docs/api.md, and every
+// frontend page -- was built against the original snake_case shape from
+// before the TypeORM migration. Every GET endpoint below needs this, or
+// fields silently come back as undefined (start_datetime showed as
+// "Invalid Date"; venue_description, minimum_age, and cover_image_url
+// were just as broken, only less visibly so).
+function toEventJSON(e: Event) {
+  return {
+    id: e.id,
+    title: e.title,
+    description: e.description,
+    venue_name: e.venueName,
+    venue_description: e.venueDescription,
+    category: e.category,
+    start_datetime: e.startDatetime,
+    minimum_age: e.minimumAge,
+    lat: e.lat,
+    lng: e.lng,
+    city: e.city,
+    cover_image_url: e.coverImageUrl,
+    is_promoted: e.isPromoted,
+    join_policy: e.joinPolicy,
+    created_by: e.createdBy,
+    created_at: e.createdAt,
+  };
 }
 
-export async function listEvents(filters: { category?: string; city?: string; date?: string }) {
+export async function listMessages(eventId: string, requesterId: string) {
+  const blockedIds = await getBlockedUserIds(requesterId);
+
+  const messages = await messageRepository().find({
+    where: blockedIds.length
+      ? { eventId, userId: Not(In(blockedIds)) }
+      : { eventId },
+    order: { createdAt: 'ASC' },
+    take: 100, // most recent 100 in the room; older history is a future-work item
+    relations: ['user'], // to attach the sender's display name below
+  });
+
+  return messages.map((m) => ({
+    id: m.id,
+    eventId: m.eventId,
+    userId: m.userId,
+    userName: m.user?.name ?? 'Unknown',
+    body: m.body,
+    createdAt: m.createdAt,
+  }));
+}
+
+export async function listEvents(filters: {
+  category?: string; city?: string; date?: string; date_from?: string; date_to?: string;
+}) {
   // QueryBuilder rather than a plain .find() here because of the date::date
   // cast (matching a calendar day, not an exact timestamp) -- the same
   // reason the original raw-SQL version needed it.
@@ -28,12 +73,17 @@ export async function listEvents(filters: { category?: string; city?: string; da
   if (filters.category) qb.andWhere('event.category = :category', { category: filters.category });
   if (filters.city) qb.andWhere('event.city = :city', { city: filters.city });
   if (filters.date) qb.andWhere('event.startDatetime::date = :date', { date: filters.date });
+  // date_from/date_to is a RANGE -- used by AI search, since "this weekend"
+  // means two days, not one exact date like the manual date picker sends.
+  if (filters.date_from) qb.andWhere('event.startDatetime::date >= :dateFrom', { dateFrom: filters.date_from });
+  if (filters.date_to) qb.andWhere('event.startDatetime::date <= :dateTo', { dateTo: filters.date_to });
 
-  return qb.getMany();
+  const events = await qb.getMany();
+  return events.map(toEventJSON);
 }
 
 export async function listTrendingEvents() {
-  return eventRepository()
+  const trending = await eventRepository()
     .createQueryBuilder('event')
     .leftJoin('attendance', 'a', 'a.event_id = event.id AND a.status = :status', { status: 'going' })
     .addSelect('COUNT(a.id)', 'attendee_count')
@@ -42,18 +92,21 @@ export async function listTrendingEvents() {
     .orderBy('attendee_count', 'DESC')
     .limit(10)
     .getMany();
+  return trending.map(toEventJSON);
 }
 
 export async function listFeaturedEvents() {
-  return eventRepository().find({
+  const featured = await eventRepository().find({
     where: { isPromoted: true, startDatetime: MoreThanOrEqual(new Date()) },
     order: { startDatetime: 'ASC' },
     take: 10,
   });
+  return featured.map(toEventJSON);
 }
 
 export async function getEventById(id: string) {
-  return eventRepository().findOne({ where: { id } });
+  const event = await eventRepository().findOne({ where: { id } });
+  return event ? toEventJSON(event) : null;
 }
 
 export async function getMyAttendanceStatus(userId: string, eventId: string) {
@@ -82,7 +135,8 @@ export async function createEvent(data: CreateEventDto, userId: string) {
     joinPolicy: data.join_policy ?? 'open',
     createdBy: userId,
   });
-  return eventRepository().save(event);
+  const saved = await eventRepository().save(event);
+  return toEventJSON(saved);
 }
 
 export async function markGoing(userId: string, eventId: string) {
@@ -139,12 +193,55 @@ export async function updateEvent(
   if (data.join_policy !== undefined) { patch.joinPolicy = data.join_policy; delete patch.join_policy; }
 
   await eventRepository().update(id, patch);
-  return eventRepository().findOne({ where: { id } });
+  const updated = await eventRepository().findOne({ where: { id } });
+  return updated ? toEventJSON(updated) : null;
 }
 
 export async function deleteEvent(id: string, userId: string, userRole: string) {
   await assertOwnerOrAdmin(id, userId, userRole);
   await eventRepository().delete(id);
+}
+
+export async function getRecommendations(userId: string, limit = 10) {
+  // Pull this user's "going" history along with each event's category.
+  const history = await attendanceRepository().find({
+    where: { userId, status: 'going' },
+    relations: ['event'],
+  });
+
+  const attendedEventIds = history.map((a) => a.eventId);
+  const categoryCounts: Record<string, number> = {};
+  for (const a of history) {
+    if (a.event) categoryCounts[a.event.category] = (categoryCounts[a.event.category] ?? 0) + 1;
+  }
+
+  const hasHistory = Object.keys(categoryCounts).length > 0;
+
+  // Cold start: a brand-new user has no history to score against, so
+  // there's nothing meaningful to personalize yet. Trending is a
+  // reasonable, honest fallback rather than returning nothing.
+  if (!hasHistory) {
+    return listTrendingEvents();
+  }
+
+  const qb = eventRepository()
+    .createQueryBuilder('event')
+    .where('event.startDatetime >= NOW()');
+
+  if (attendedEventIds.length) {
+    qb.andWhere('event.id NOT IN (:...ids)', { ids: attendedEventIds });
+  }
+
+  const upcoming = await qb.getMany();
+
+  // Transparent scoring, not a model: an event scores higher the more
+  // times this user has attended its category before. Ties break by
+  // soonest date, so the list stays useful even with a shallow history.
+  const scored = upcoming
+    .map((event) => ({ event, score: categoryCounts[event.category] ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.event.startDatetime.getTime() - b.event.startDatetime.getTime());
+
+  return scored.slice(0, limit).map((s) => toEventJSON(s.event));
 }
 
 export async function saveEvent(userId: string, eventId: string) {
