@@ -202,6 +202,18 @@ export async function deleteEvent(id: string, userId: string, userRole: string) 
   await eventRepository().delete(id);
 }
 
+// Pure function, deliberately separated from the database calls around it
+// in getRecommendations below -- this is the actual "scoring algorithm"
+// for the recommendation feature, and keeping it pure (no I/O) is what
+// makes it possible to unit-test the logic itself without needing a real
+// database connection. See events.scoring.spec.ts.
+export function scoreEventsByCategory(events: Event[], categoryCounts: Record<string, number>): Event[] {
+  return events
+    .map((event) => ({ event, score: categoryCounts[event.category] ?? 0 }))
+    .sort((a, b) => b.score - a.score || a.event.startDatetime.getTime() - b.event.startDatetime.getTime())
+    .map((s) => s.event);
+}
+
 export async function getRecommendations(userId: string, limit = 10) {
   // Pull this user's "going" history along with each event's category.
   const history = await attendanceRepository().find({
@@ -237,11 +249,9 @@ export async function getRecommendations(userId: string, limit = 10) {
   // Transparent scoring, not a model: an event scores higher the more
   // times this user has attended its category before. Ties break by
   // soonest date, so the list stays useful even with a shallow history.
-  const scored = upcoming
-    .map((event) => ({ event, score: categoryCounts[event.category] ?? 0 }))
-    .sort((a, b) => b.score - a.score || a.event.startDatetime.getTime() - b.event.startDatetime.getTime());
+  const scored = scoreEventsByCategory(upcoming, categoryCounts);
 
-  return scored.slice(0, limit).map((s) => toEventJSON(s.event));
+  return scored.slice(0, limit).map(toEventJSON);
 }
 
 export async function saveEvent(userId: string, eventId: string) {

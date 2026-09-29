@@ -1,59 +1,16 @@
-import 'reflect-metadata';
-import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import rateLimit from 'express-rate-limit';
 
+import { createApp } from './app';
 import { AppDataSource } from './data-source';
 import { Message } from './modules/events/entities/message.entity';
 import { User } from './modules/users/entities/user.entity';
-import authRoutes from './modules/auth/auth.controller';
-import eventsRoutes from './modules/events/events.controller';
-import usersRoutes from './modules/users/users.controller';
-import safetyRoutes from './modules/safety/safety.controller';
-import aiRoutes from './modules/ai/ai.controller';
 
-const app = express();
+const app = createApp();
 const httpServer = createServer(app);
 
 const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',');
-
-app.use(cors({ origin: corsOrigins }));
-app.use(express.json());
-
-app.get('/health', async (_req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
-});
-
-app.get('/health/db', async (_req, res) => {
-  try {
-    await AppDataSource.query('SELECT 1');
-    res.json({ status: 'ok', db: 'connected' });
-  } catch (err: any) {
-    console.error('DB health check failed:', err);
-    res.status(500).json({
-      status: 'error',
-      db: 'unreachable',
-      detail: err?.message || err?.code || 'see backend terminal for details',
-    });
-  }
-});
-
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 30 });
-app.use('/auth', authLimiter, authRoutes);
-app.use('/events', eventsRoutes);
-app.use('/users', usersRoutes);
-app.use('/', safetyRoutes);
-
-// AI endpoints get their own, stricter limiter -- every call is a real
-// Groq API request with a real (if small) cost, unlike the other routes
-// which just hit our own database.
-const aiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 20 });
-app.use('/ai', aiLimiter, aiRoutes);
-
 const io = new Server(httpServer, { cors: { origin: corsOrigins } });
 
 // Authenticate every socket connection with the same JWT used for HTTP
