@@ -23,5 +23,13 @@ export const AppDataSource = new DataSource({
 
   logging: false,
   entities: [User, Event, Attendance, SavedEvent, Message, Report, Block],
-  migrations: ['src/migrations/*.ts'],
+
+  // __dirname makes this resolve correctly in BOTH contexts automatically:
+  // when this file runs via ts-node locally, __dirname points at src/, so
+  // it finds the .ts migration; when it runs as compiled dist/data-source.js
+  // in production, __dirname points at dist/, so it finds the compiled .js
+  // version instead -- never the raw .ts file, which is what broke on
+  // Render (a newer Node version tried to load that raw file directly and
+  // choked on a TypeScript-only interface with no real JS equivalent).
+  migrations: [__dirname + '/migrations/*.{js,ts}'],
 });
