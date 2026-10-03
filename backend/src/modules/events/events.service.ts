@@ -72,7 +72,7 @@ export async function listEvents(filters: {
 
   if (filters.category) qb.andWhere('event.category = :category', { category: filters.category });
   if (filters.city) qb.andWhere('event.city = :city', { city: filters.city });
-  if (filters.date) qb.andWhere('event.startDatetime ::date = :date', { date: filters.date });
+  if (filters.date) qb.andWhere('event.startDatetime ::date = :onDate', { onDate: filters.date });
   // date_from/date_to is a RANGE -- used by AI search, since "this weekend"
   // means two days, not one exact date like the manual date picker sends.
   if (filters.date_from) qb.andWhere('event.startDatetime ::date >= :dateFrom', { dateFrom: filters.date_from });
