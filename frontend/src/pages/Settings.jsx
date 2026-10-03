@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getMyProfile, updateMyProfile, becomeOrganizer } from '../services/users-service';
+import { UsersIcon, CheckIcon } from '../components/icons.jsx';
 
 export default function Settings() {
   const [profile, setProfile] = useState(null);
@@ -42,54 +43,54 @@ export default function Settings() {
     }
   }
 
-  if (status === 'loading') return <p className="p-6 text-slate-400">Loading…</p>;
-  if (status === 'error') return <p className="p-6 text-red-500">Log in to view settings.</p>;
+  if (status === 'loading') return <p className="p-10 text-center text-ink-400">Loading…</p>;
+  if (status === 'error') return <p className="p-10 text-center text-clay-600">Log in to view settings.</p>;
 
   return (
-    <div className="max-w-lg mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-bold text-slate-800 mb-2">Settings</h1>
+    <div className="max-w-lg mx-auto px-4 sm:px-6 py-10">
+      <h1 className="font-display font-semibold text-3xl text-ink-900 mb-6">Settings</h1>
 
-      <div className="flex items-center justify-between border rounded-lg p-4">
-        <div>
-          <p className="font-medium text-slate-800">Show me on event rosters</p>
-          <p className="text-sm text-slate-500 mt-1">
-            When on, your name is visible to other attendees who RSVP "Going" to the same event.
-            When off, you still attend and can chat, but your name is hidden from the public roster.
-          </p>
+      <div className="panel p-5 flex items-center justify-between gap-4 mb-4">
+        <div className="flex items-start gap-3">
+          <UsersIcon className="w-5 h-5 text-clay-500 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold text-ink-900">Show me on event rosters</p>
+            <p className="text-sm text-ink-500 mt-1">
+              When on, your name is visible to other attendees who RSVP "Going" to the same event.
+              When off, you still attend and can chat, but your name is hidden from the public roster.
+            </p>
+          </div>
         </div>
         <button
           onClick={toggleRosterVisible}
           disabled={saving}
-          className={`ml-4 flex-shrink-0 w-12 h-7 rounded-full transition-colors relative ${
-            profile.rosterVisible ? 'bg-slate-800' : 'bg-slate-300'
+          className={`ml-2 flex-shrink-0 w-12 h-7 rounded-full transition-colors relative ${
+            profile.rosterVisible ? 'bg-clay-500' : 'bg-ink-200'
           }`}
         >
           <span
-            className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-transform ${
+            className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
               profile.rosterVisible ? 'translate-x-6' : 'translate-x-1'
             }`}
           />
         </button>
       </div>
 
-      <div className="border rounded-lg p-4">
-        <p className="font-medium text-slate-800">Organizer account</p>
+      <div className="panel p-5">
+        <p className="font-semibold text-ink-900 mb-1">Organizer account</p>
         {profile.role === 'user' ? (
           <>
-            <p className="text-sm text-slate-500 mt-1 mb-3">
+            <p className="text-sm text-ink-500 mb-3">
               Upgrade to an organizer account to create and manage your own events.
             </p>
-            <button
-              onClick={handleBecomeOrganizer}
-              disabled={upgrading}
-              className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium"
-            >
+            <button onClick={handleBecomeOrganizer} disabled={upgrading} className="btn-primary">
               {upgrading ? 'Upgrading…' : 'Become an organizer'}
             </button>
           </>
         ) : (
-          <p className="text-sm text-slate-500 mt-1">
-            You're currently an <span className="font-medium">{profile.role}</span> — you can create events.
+          <p className="text-sm text-ink-600 flex items-center gap-1.5">
+            <CheckIcon className="w-4 h-4 text-olive-600" />
+            You're currently an <span className="font-semibold text-ink-900">{profile.role}</span> — you can create events.
           </p>
         )}
       </div>

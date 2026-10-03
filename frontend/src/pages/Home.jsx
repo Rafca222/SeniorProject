@@ -1,40 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { listEvents, listTrending, listFeatured, getRecommendations } from '../services/events-service';
 import { parseSearch } from '../services/ai-service';
-import { CATEGORIES } from '../constants/categories';
-
-function formatCardDate(iso) {
-  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
-function EventCard({ event, compact }) {
-  return (
-    <Link
-      to={`/events/${event.id}`}
-      className={`rounded-lg border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow block ${
-        compact ? 'min-w-[220px] max-w-[220px] flex-shrink-0' : ''
-      }`}
-    >
-      {event.cover_image_url ? (
-        <img src={event.cover_image_url} alt="" className="w-full h-28 object-cover" />
-      ) : (
-        <div className="w-full h-28 bg-slate-100 flex items-center justify-center text-slate-300 text-xs">
-          No cover image
-        </div>
-      )}
-      <div className="p-4">
-        <h2 className="font-semibold text-slate-800">{event.title}</h2>
-        <p className="text-sm text-slate-500">
-          {event.category} · {event.city} · {formatCardDate(event.start_datetime)}
-        </p>
-        {!compact && (
-          <p className="text-sm text-slate-600 mt-2 line-clamp-2">{event.description}</p>
-        )}
-      </div>
-    </Link>
-  );
-}
+import { CATEGORIES, CATEGORY_META } from '../constants/categories';
+import EventCard from '../components/EventCard.jsx';
 
 export default function Home() {
   const [events, setEvents] = useState([]);
@@ -47,10 +15,14 @@ export default function Home() {
   const [aiCity, setAiCity] = useState('');
   const [aiDateFrom, setAiDateFrom] = useState('');
   const [aiDateTo, setAiDateTo] = useState('');
-  const [aiSearchActive, setAiSearchActive] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  // Explicit flag for "an AI search is currently driving the results" --
+  // NOT derived from aiCity/aiDateFrom/aiDateTo, because a category-only
+  // search (e.g. "any music events") leaves all three of those empty,
+  // which used to make the app think no search was active at all.
+  const [aiSearchActive, setAiSearchActive] = useState(false);
 
   const [trending, setTrending] = useState([]);
   const [featured, setFeatured] = useState([]);
@@ -93,11 +65,6 @@ export default function Home() {
       setAiDateFrom(parsed.date_from || '');
       setAiDateTo(parsed.date_to || '');
       setDate('');
-      // A search happened, full stop -- true regardless of whether the AI
-      // filled in a city/date, a category, or nothing at all recognizable.
-      // The earlier version only checked city/date, so a category-only
-      // search like "hikes" fell through and looked like no search had
-      // run at all.
       setAiSearchActive(true);
     } catch (err) {
       setSearchError(err.response?.data?.error || 'AI search is unavailable right now.');
@@ -107,136 +74,175 @@ export default function Home() {
   }
 
   function clearAiFilters() {
+    setCategory('');
     setAiCity('');
     setAiDateFrom('');
     setAiDateTo('');
     setSearchText('');
-    setCategory(''); // was left untouched before -- the dropdown would
-                      // silently keep showing the AI's category even
-                      // after "clearing" the search
     setAiSearchActive(false);
   }
 
-  const hasAiFilters = aiCity || aiDateFrom || aiDateTo;
-  const isFiltered = category || date || aiSearchActive;
+  // True whenever the visible grid is a filtered subset rather than
+  // "everything" -- drives hiding the Recommended/Featured/Trending rails
+  // (showing curated picks next to a specific search is just noise) and
+  // swaps the manual category/date controls out for the AI search summary.
+  const isFiltered = Boolean(category || date || aiSearchActive);
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-3xl font-bold text-slate-800 mb-2">Eventure</h1>
-      <p className="text-slate-500 mb-6">Discover, join, and connect at local events.</p>
+    <div>
+      {/* Hero -- a dusk-to-sunset gradient standing in for the Lebanese
+          coast at golden hour, the one deliberately bold moment the rest
+          of the page stays quiet around. */}
+      <section className="sunset relative overflow-hidden">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-14 pb-16 sm:pt-20 sm:pb-20">
+          <p className="text-citrus-200 text-sm font-semibold mb-3">
+            Beirut, Byblos, Batroun, and everywhere between
+          </p>
+          <h1 className="font-display font-semibold text-4xl sm:text-5xl text-white leading-[1.08] max-w-xl">
+            Find what Lebanon is doing tonight
+          </h1>
+          <p className="text-white/80 mt-4 max-w-md text-base sm:text-lg">
+            Hikes, dinners, concerts, and nights out — RSVP, see who's going, and show up.
+          </p>
 
-      <form onSubmit={handleSearch} className="mb-4 flex gap-2">
-        <input
-          className="flex-1 border rounded-md p-2 text-sm"
-          placeholder='Try "hikes near Byblos this weekend"'
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-        />
-        <button
-          disabled={searching || !searchText.trim()}
-          className="bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
-        >
-          {searching ? 'Searching…' : '✨ AI Search'}
-        </button>
-      </form>
-      {searchError && <p className="text-sm text-red-500 mb-4">{searchError}</p>}
-      {aiSearchActive && (
-        <p className="text-sm text-slate-500 mb-4">
-          Showing: {category || 'any category'}
-          {aiCity && ` · ${aiCity}`}
-          {aiDateFrom && ` · ${aiDateFrom}${aiDateTo && aiDateTo !== aiDateFrom ? ` to ${aiDateTo}` : ''}`}
-          {' · '}
-          <button onClick={clearAiFilters} className="underline text-slate-600">Clear search</button>
-        </p>
-      )}
-
-      {!isFiltered && isLoggedIn && recommended.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            ✨ Recommended for you
-          </h2>
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {recommended.map((e) => <EventCard key={e.id} event={e} compact />)}
-          </div>
-        </div>
-      )}
-
-      {!isFiltered && featured.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            ⭐ Featured
-          </h2>
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {featured.map((e) => <EventCard key={e.id} event={e} compact />)}
-          </div>
-        </div>
-      )}
-
-      {!isFiltered && trending.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            🔥 Trending
-          </h2>
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {trending.map((e) => <EventCard key={e.id} event={e} compact />)}
-          </div>
-        </div>
-      )}
-
-      {!aiSearchActive && (
-        <>
-          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-            All events
-          </h2>
-
-          <div className="mb-6 flex gap-3">
-            <select
-              className="border rounded-md p-2 text-sm"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            >
-              <option value="">All categories</option>
-              {CATEGORIES.map((c) => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+          <form onSubmit={handleSearch} className="mt-7 flex max-w-lg">
             <input
-              type="date"
-              className="border rounded-md p-2 text-sm text-slate-600"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setAiDateFrom('');
-                setAiDateTo('');
-              }}
+              className="flex-1 min-w-0 rounded-l-full px-5 py-3.5 text-sm text-ink-800 placeholder:text-ink-400 focus:outline-none"
+              placeholder='Try "hikes near Byblos this weekend"'
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
             />
-            {date && (
-              <button
-                onClick={() => setDate('')}
-                className="text-sm text-slate-400 hover:text-slate-600"
-              >
-                Clear date
-              </button>
+            <button
+              disabled={searching || !searchText.trim()}
+              className="rounded-r-full bg-ink-900 text-white px-5 sm:px-6 font-semibold text-sm disabled:opacity-50 hover:bg-black transition-colors shrink-0"
+            >
+              {searching ? 'Searching…' : 'Search'}
+            </button>
+          </form>
+          {searchError && (
+            <p className="text-sm text-white bg-black/25 rounded-lg px-3 py-1.5 mt-3 inline-block">
+              {searchError}
+            </p>
+          )}
+        </div>
+      </section>
+
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
+        {aiSearchActive && (
+          <div className="mb-8 flex flex-wrap items-center gap-2 text-sm bg-clay-50 border border-clay-100 text-clay-800 rounded-xl px-4 py-3">
+            <span className="font-semibold">Showing:</span>
+            <span>{category || 'any category'}</span>
+            {aiCity && <span>{aiCity}</span>}
+            {aiDateFrom && (
+              <span>
+                {aiDateFrom}{aiDateTo && aiDateTo !== aiDateFrom ? ` to ${aiDateTo}` : ''}
+              </span>
             )}
+            <button onClick={clearAiFilters} className="ml-auto underline font-semibold hover:text-clay-900">
+              Clear search
+            </button>
           </div>
-        </>
-      )}
+        )}
 
-      {status === 'loading' && <p className="text-slate-400">Loading events…</p>}
-      {status === 'error' && (
-        <p className="text-red-500">
-          Couldn't reach the backend. Is it running and is <code>VITE_API_URL</code> set correctly?
-        </p>
-      )}
-      {status === 'ok' && events.length === 0 && (
-        <p className="text-slate-400">
-          No events match{category ? ` "${category}"` : ''}{aiSearchActive ? ' that search' : ''} yet — run <code>npm run seed</code> in the backend to add some.
-        </p>
-      )}
+        {!isFiltered && isLoggedIn && recommended.length > 0 && (
+          <Rail title="Recommended for you" events={recommended} />
+        )}
+        {!isFiltered && featured.length > 0 && (
+          <Rail title="Featured" events={featured} />
+        )}
+        {!isFiltered && trending.length > 0 && (
+          <Rail title="Trending now" events={trending} />
+        )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {events.map((event) => <EventCard key={event.id} event={event} />)}
+        <div className="flex items-baseline justify-between mb-5">
+          <h2 className="font-display text-2xl font-semibold text-ink-900">
+            {isFiltered ? 'Matching events' : 'All events'}
+          </h2>
+          {status === 'ok' && (
+            <span className="text-sm text-ink-400">
+              {events.length} event{events.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+
+        {!aiSearchActive && (
+          <div className="mb-7 flex flex-wrap items-center gap-2">
+            <CategoryPill label="All" active={!category} onClick={() => setCategory('')} />
+            {CATEGORIES.map((c) => (
+              <CategoryPill
+                key={c}
+                label={c}
+                icon={CATEGORY_META[c].icon}
+                active={category === c}
+                solidClass={CATEGORY_META[c].solid}
+                onClick={() => setCategory(category === c ? '' : c)}
+              />
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <input
+                type="date"
+                className="input-field !w-auto !py-2"
+                value={date}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setAiDateFrom('');
+                  setAiDateTo('');
+                }}
+              />
+              {date && (
+                <button onClick={() => setDate('')} className="text-sm text-ink-400 hover:text-ink-600">
+                  Clear date
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {status === 'loading' && <p className="text-ink-400 py-10 text-center">Loading events…</p>}
+        {status === 'error' && (
+          <p className="text-clay-600 py-10 text-center">
+            Couldn't reach the backend. Is it running and is <code>VITE_API_URL</code> set correctly?
+          </p>
+        )}
+        {status === 'ok' && events.length === 0 && (
+          <div className="text-center py-14 panel">
+            <p className="text-3xl mb-2">🔍</p>
+            <p className="text-ink-500">
+              No events match{category ? ` "${category}"` : ''}{isFiltered ? ' that search' : ''} yet.
+            </p>
+          </div>
+        )}
+
+        <div className="grid gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+          {events.map((event) => <EventCard key={event.id} event={event} />)}
+        </div>
       </div>
     </div>
+  );
+}
+
+function Rail({ title, events }) {
+  return (
+    <div className="mb-10">
+      <h2 className="font-display text-2xl font-semibold text-ink-900 mb-4">{title}</h2>
+      <div className="flex gap-5 overflow-x-auto pb-2 scrollbar-hide">
+        {events.map((e) => <EventCard key={e.id} event={e} compact />)}
+      </div>
+    </div>
+  );
+}
+
+function CategoryPill({ label, icon, active, solidClass, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap ${
+        active
+          ? `${solidClass || 'bg-ink-900 text-white'} border-transparent`
+          : 'bg-white text-ink-600 border-ink-200 hover:border-ink-300'
+      }`}
+    >
+      {icon && <span>{icon}</span>} {label}
+    </button>
   );
 }

@@ -1,3 +1,79 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans text-ink-800;
+    background-color: #f6eee0;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 bg-clay-500 text-white px-5 py-2.5 rounded-full font-semibold text-sm shadow-sm hover:bg-clay-600 active:bg-clay-700 transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-1.5 bg-ink-900 text-white px-5 py-2.5 rounded-full font-semibold text-sm shadow-sm hover:bg-black transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-1.5 bg-white text-ink-700 border border-ink-200 px-5 py-2.5 rounded-full font-semibold text-sm hover:border-ink-300 hover:bg-ink-50 transition-colors disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .input-field {
+    @apply w-full border border-ink-200 rounded-xl px-3.5 py-2.5 text-sm text-ink-800 placeholder:text-ink-400 bg-white focus:outline-none focus:ring-2 focus:ring-clay-300 focus:border-transparent transition-shadow;
+  }
+  /* Flat bordered content panel -- deliberately NOT the same shape/shadow
+     recipe as the arch cards, so the page has two clear materials
+     (architectural "window" cards vs. plain paper panels) instead of one
+     rounded-rectangle-plus-soft-shadow treatment repeated on everything. */
+  .panel {
+    @apply bg-white rounded-xl border border-ink-100;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* The signature shape: a doorway/dome silhouette (flat sides, rounded
+   top), nodding to Mediterranean archways -- used ONLY for event imagery,
+   so it reads as a deliberate motif rather than a radius slapped on
+   everything. 999px clamps to a perfect half-dome regardless of the
+   element's actual width. */
+.arch {
+  border-radius: 999px 999px 10px 10px;
+}
+
+/* A faint tile-lattice texture (a nod to Lebanese cement "balaat" tiles),
+   reserved for cover-image placeholders. This MUST be a layered
+   pseudo-element rather than a second `background-image` on the element
+   itself: stacking it directly on something that also carries a Tailwind
+   gradient utility (bg-gradient-to-br etc) would make the two
+   background-image declarations silently overwrite each other instead of
+   layering, since CSS doesn't merge two declarations of the same
+   property -- whichever rule is later in the stylesheet just wins outright. */
+.tile-pattern {
+  position: relative;
+}
+.tile-pattern::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0.18) 1.5px, transparent 1.5px, transparent 16px),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0.18) 1.5px, transparent 1.5px, transparent 16px);
+  pointer-events: none;
+}
+
+/* The hero's "sunset over the coast" gradient -- deep sea-dusk fading
+   through clay into citrus, used once, deliberately, as the hero's
+   signature backdrop rather than a decorative wash repeated elsewhere. */
+.sunset {
+  background: linear-gradient(185deg, #1b3a3e 0%, #3c6f6f 32%, #c1552c 72%, #e3a33d 100%);
+}

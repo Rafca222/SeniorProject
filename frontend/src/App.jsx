@@ -1,4 +1,5 @@
-import { Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate } from 'react-router-dom';
+import Navbar from './components/Navbar.jsx';
 import Home from './pages/Home.jsx';
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
@@ -18,22 +19,8 @@ export default function App() {
   }
 
   return (
-    <div>
-      <nav className="border-b border-slate-200 p-4 flex gap-4 text-sm font-medium text-slate-600">
-        <Link to="/">Directory</Link>
-        {isLoggedIn ? (
-          <>
-            <Link to="/events/new">Create event</Link>
-            <Link to="/settings">Settings</Link>
-            <button onClick={handleLogout} className="text-slate-600">Log out</button>
-          </>
-        ) : (
-          <>
-            <Link to="/login">Log in</Link>
-            <Link to="/register">Sign up</Link>
-          </>
-        )}
-      </nav>
+    <div className="min-h-screen" style={{ backgroundColor: '#F6EEE0' }}>
+      <Navbar isLoggedIn={isLoggedIn} onLogout={handleLogout} />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />

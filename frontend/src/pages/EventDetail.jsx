@@ -4,12 +4,18 @@ import {
   getEvent, getMyAttendance, getMySaved, getRoster,
   joinEvent, leaveEvent, saveEvent, unsaveEvent,
 } from '../services/events-service';
+import { CATEGORY_META, DEFAULT_CATEGORY_META } from '../constants/categories';
+import { ArrowLeftIcon, CalendarIcon, PinIcon, UsersIcon, ChatIcon, CheckIcon, StarIcon } from '../components/icons.jsx';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString(undefined, {
     weekday: 'short', month: 'short', day: 'numeric',
     hour: 'numeric', minute: '2-digit',
   });
+}
+
+function initials(name) {
+  return (name || '?').trim().slice(0, 1).toUpperCase();
 }
 
 export default function EventDetail() {
@@ -68,75 +74,107 @@ export default function EventDetail() {
     }
   }
 
-  if (status === 'loading') return <p className="p-6 text-slate-400">Loading…</p>;
-  if (status === 'error' || !event) return <p className="p-6 text-red-500">Couldn't load this event.</p>;
+  if (status === 'loading') {
+    return <p className="p-10 text-center text-ink-400">Loading…</p>;
+  }
+  if (status === 'error' || !event) {
+    return <p className="p-10 text-center text-clay-600">Couldn't load this event.</p>;
+  }
+
+  const meta = CATEGORY_META[event.category] || DEFAULT_CATEGORY_META;
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <Link to="/" className="text-sm text-slate-500 hover:underline">&larr; Back to directory</Link>
+    <div className="max-w-xl mx-auto px-4 sm:px-6 py-8">
+      <Link to="/" className="inline-flex items-center gap-1 text-sm text-ink-500 hover:text-ink-800 mb-5">
+        <ArrowLeftIcon className="w-4 h-4" /> Back to directory
+      </Link>
 
-      <h1 className="text-2xl font-bold text-slate-800 mt-3">{event.title}</h1>
-      <p className="text-sm text-slate-500 mb-4">{event.category} · {event.city}</p>
-
-      <div className="space-y-2 text-sm text-slate-700 mb-6">
-        <p><span className="font-medium">When:</span> {formatDate(event.start_datetime)}</p>
-        <p><span className="font-medium">Where:</span> {event.venue_name}</p>
-        {event.venue_description && <p className="text-slate-500">{event.venue_description}</p>}
-        {event.minimum_age && <p><span className="font-medium">Minimum age:</span> {event.minimum_age}+</p>}
+      {/* The same arch "window" used for cards, sized narrower here so the
+          dome stays a clean semicircle rather than a flattened wide band. */}
+      <div className="relative h-56 overflow-hidden arch mb-6">
+        {event.cover_image_url ? (
+          <img src={event.cover_image_url} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className={`w-full h-full flex items-center justify-center text-6xl tile-pattern ${meta.gradient}`}>
+            {meta.icon}
+          </div>
+        )}
       </div>
 
-      <p className="text-slate-700 mb-6">{event.description}</p>
+      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${meta.badge}`}>
+        {meta.icon} {event.category}
+      </span>
 
-      <div className="flex gap-3 mb-2">
+      <h1 className="font-display font-semibold text-3xl text-ink-900 mt-3 leading-tight">
+        {event.title}
+      </h1>
+
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-ink-600 mt-3">
+        <span className="inline-flex items-center gap-1.5">
+          <CalendarIcon className="w-4 h-4 text-clay-500" /> {formatDate(event.start_datetime)}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <PinIcon className="w-4 h-4 text-clay-500" /> {event.venue_name}
+        </span>
+      </div>
+      {event.venue_description && (
+        <p className="text-sm text-ink-500 mt-1.5">{event.venue_description}</p>
+      )}
+      {event.minimum_age && (
+        <p className="text-sm text-ink-500 mt-1.5">Minimum age: {event.minimum_age}+</p>
+      )}
+
+      <p className="text-ink-700 leading-relaxed mt-5">{event.description}</p>
+
+      <div className="flex flex-wrap gap-2.5 mt-6">
         <button
           onClick={toggleGoing}
-          className={`px-4 py-2 rounded-md font-medium text-sm ${
-            going ? 'bg-green-600 text-white' : 'bg-slate-800 text-white'
-          }`}
+          className={going ? 'btn-secondary bg-olive-600 hover:bg-olive-700' : 'btn-primary'}
         >
-          {going ? "✓ I'm Going" : "I'm Going"}
+          {going && <CheckIcon className="w-4 h-4" />}
+          I'm Going
         </button>
         <button
           onClick={toggleSaved}
-          className={`px-4 py-2 rounded-md font-medium text-sm border ${
-            saved ? 'border-slate-800 text-slate-800' : 'border-slate-300 text-slate-500'
-          }`}
+          className={saved ? 'btn-outline !border-clay-300 !text-clay-600' : 'btn-outline'}
         >
-          {saved ? '★ Saved' : '☆ Save for later'}
+          <StarIcon filled={saved} className="w-4 h-4" />
+          {saved ? 'Saved' : 'Save for later'}
         </button>
         {going && (
-          <Link
-            to={`/events/${id}/chat`}
-            className="px-4 py-2 rounded-md font-medium text-sm border border-slate-300 text-slate-700"
-          >
-            💬 Open chat
+          <Link to={`/events/${id}/chat`} className="btn-outline">
+            <ChatIcon className="w-4 h-4" /> Open chat
           </Link>
         )}
       </div>
 
-      {actionError && <p className="text-sm text-red-500 mt-2">{actionError}</p>}
+      {actionError && <p className="text-sm text-clay-600 mt-3">{actionError}</p>}
 
-      <div className="mt-8">
-        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">
+      <div className="panel p-5 mt-8">
+        <h2 className="font-display text-lg font-semibold text-ink-900 mb-3 flex items-center gap-1.5">
+          <UsersIcon className="w-4 h-4 text-ink-400" />
           Who's going {roster.length > 0 && `(${roster.length})`}
         </h2>
         {roster.length === 0 ? (
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-ink-400">
             No one visible on the roster yet — be the first to hit "I'm Going."
           </p>
         ) : (
-          <ul className="flex flex-wrap gap-2">
+          <ul className="flex flex-wrap gap-2.5">
             {roster.map((person) => (
               <li
                 key={person.id}
-                className="px-3 py-1.5 rounded-full bg-slate-100 text-sm text-slate-700"
+                className="flex items-center gap-2 pl-1.5 pr-3.5 py-1.5 rounded-full bg-sand border border-ink-100 text-sm text-ink-700"
               >
+                <span className="w-6 h-6 rounded-full bg-clay-500 text-white text-[11px] font-bold flex items-center justify-center">
+                  {initials(person.name)}
+                </span>
                 {person.name}
               </li>
             ))}
           </ul>
         )}
-        <p className="text-xs text-slate-400 mt-2">
+        <p className="text-xs text-ink-400 mt-3">
           Only shows attendees who have kept their roster visibility on.
         </p>
       </div>
