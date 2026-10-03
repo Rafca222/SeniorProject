@@ -41,6 +41,13 @@ export function getEvent(id) {
   return api.get(`/events/${id}`).then((res) => res.data);
 }
 
+// Owner (or admin) only -- the backend re-checks this itself via
+// assertOwnerOrAdmin, this is just so the UI can hide the button for
+// everyone else rather than showing a button that 403s.
+export function deleteEvent(id) {
+  return api.delete(`/events/${id}`);
+}
+
 export function getMyAttendance(id) {
   return api.get(`/events/${id}/attendance/me`).then((res) => res.data);
 }

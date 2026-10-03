@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   getEvent, getMyAttendance, getMySaved, getRoster,
-  joinEvent, leaveEvent, saveEvent, unsaveEvent,
+  joinEvent, leaveEvent, saveEvent, unsaveEvent, deleteEvent,
 } from '../services/events-service';
+import { getMyProfile } from '../services/users-service';
 import { CATEGORY_META, DEFAULT_CATEGORY_META } from '../constants/categories';
-import { ArrowLeftIcon, CalendarIcon, PinIcon, UsersIcon, ChatIcon, CheckIcon, StarIcon } from '../components/icons.jsx';
+import { ArrowLeftIcon, CalendarIcon, PinIcon, UsersIcon, ChatIcon, CheckIcon, StarIcon, TrashIcon } from '../components/icons.jsx';
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString(undefined, {
@@ -20,12 +21,15 @@ function initials(name) {
 
 export default function EventDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [event, setEvent] = useState(null);
   const [going, setGoing] = useState(false);
   const [saved, setSaved] = useState(false);
   const [roster, setRoster] = useState([]);
   const [status, setStatus] = useState('loading'); // loading | ok | error
   const [actionError, setActionError] = useState('');
+  const [myId, setMyId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isLoggedIn = !!localStorage.getItem('accessToken');
 
@@ -47,6 +51,7 @@ export default function EventDetail() {
     if (isLoggedIn) {
       getMyAttendance(id).then((data) => setGoing(data.status === 'going')).catch(() => {});
       getMySaved(id).then((data) => setSaved(data.saved)).catch(() => {});
+      getMyProfile().then((me) => setMyId(me.id)).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isLoggedIn]);
@@ -74,6 +79,22 @@ export default function EventDetail() {
     }
   }
 
+  async function handleDelete() {
+    const sure = window.confirm(
+      `Delete "${event.title}"? This removes it for everyone, along with its RSVPs, saves, and chat. This can't be undone.`
+    );
+    if (!sure) return;
+    setDeleting(true);
+    setActionError('');
+    try {
+      await deleteEvent(id);
+      navigate('/');
+    } catch {
+      setActionError("Couldn't delete this event — try again.");
+      setDeleting(false);
+    }
+  }
+
   if (status === 'loading') {
     return <p className="p-10 text-center text-ink-400">Loading…</p>;
   }
@@ -82,6 +103,7 @@ export default function EventDetail() {
   }
 
   const meta = CATEGORY_META[event.category] || DEFAULT_CATEGORY_META;
+  const isOwner = isLoggedIn && myId && event.created_by === myId;
 
   return (
     <div className="max-w-xl mx-auto px-4 sm:px-6 py-8">
@@ -145,6 +167,16 @@ export default function EventDetail() {
           <Link to={`/events/${id}/chat`} className="btn-outline">
             <ChatIcon className="w-4 h-4" /> Open chat
           </Link>
+        )}
+        {isOwner && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="btn-outline !border-clay-300 !text-clay-600 ml-auto disabled:opacity-50"
+          >
+            <TrashIcon className="w-4 h-4" />
+            {deleting ? 'Deleting…' : 'Delete event'}
+          </button>
         )}
       </div>
 
